@@ -203,7 +203,7 @@ def ed_graph(language: str,
     total_time = time.time() - start_time
     total_time = round(total_time)
 
-    graph_path = graph_dir / f"ed_{threshold}_{k}_{lmbda}_{total_time}.pkl"
+    graph_path = graph_dir / f"ed_{k}_{lmbda}_{threshold}_{total_time}.pkl"
     g.write_pickle(graph_path)
 
     return g, total_time
