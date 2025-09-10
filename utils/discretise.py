@@ -53,8 +53,8 @@ def load_units(
         paths = [file.stem for file in units_dir.glob("*.npy")]
     
     features = []
-    for file in paths:
-        embedding = np.load(file)
+    for file in tqdm(paths, desc="Loading unit sequences"):
+        embedding = np.load(units_dir / f"{file}.npy")
         features.append(embedding)
     
     return features, paths
