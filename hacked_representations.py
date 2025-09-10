@@ -118,7 +118,6 @@ def load_hacked_features(
 
     hacked_features = []
     path_to_idx = {p: i for i, p in enumerate(all_paths)}
-    centroids_dict = {}
 
     for group in tqdm(grouped_by_text, desc="Creating hacked features"):
         group_df = group[1]

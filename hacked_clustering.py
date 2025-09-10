@@ -243,6 +243,7 @@ def load_hacked_features(
 
     return all_features, all_paths, np.stack(list(centroids_dict.values())).astype(np.float32)
 
+
 def hacked_kmeans() -> None:
     """
     Main pipeline for clustering hacked features using k-means,
