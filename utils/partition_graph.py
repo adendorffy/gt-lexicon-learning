@@ -3,7 +3,7 @@ import igraph as ig
 from time import time
 from pathlib import Path
 import pandas as pd
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 def CPM_partition(
     g: ig.Graph,
@@ -96,19 +96,19 @@ def CPM_partition(
 
 
 def write_partition(
-    partition_type, 
-    partition_membership,
-    language,
-    dataset,
-    model_name,
-    layer,
-    distance_type,
-    threshold,
-    word_info,
-    total_time,
-    k=None,
-    lmbda=None
-):
+    partition_type: str,
+    partition_membership: List[List[int]],
+    language: str,
+    dataset: str,
+    model_name: str,
+    layer: int,
+    distance_type: str,
+    threshold: float,
+    word_info: List[str],
+    total_time: float,
+    k: Optional[int] = None,
+    lmbda: Optional[float] = None
+) -> Path:
     """
     Write clustering or graph partition results to a text file.
 

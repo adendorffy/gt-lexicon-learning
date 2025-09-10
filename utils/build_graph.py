@@ -6,7 +6,8 @@ import time
 from typing import Generator, List, Tuple, Optional
 from joblib import Parallel, delayed
 import igraph as ig
-import editdistance
+# import editdistance
+import rapidfuzz.distance.Levenshtein as editdistance
 import h5py
 import json
 
@@ -184,7 +185,8 @@ def ed_graph(language: str,
             for j in range(i + 1, len(features)):
                 seq_j = features[j]
 
-                dist = editdistance.eval(seq_i, seq_j) / max(len(seq_i), len(seq_j))
+                # dist = editdistance.eval(seq_i, seq_j) / max(len(seq_i), len(seq_j))
+                dist = editdistance.normalized_distance(seq_i, seq_j)
 
                 if dist < threshold:
                     batch_edges.append((i, j, 1 - dist))

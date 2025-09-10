@@ -58,7 +58,7 @@ def main(args: Namespace) -> None:
         membership, partition_time = CPM_partition(g, num_clusters, args.res)
         print(f"Graph partitioned in {partition_time:.2f} seconds.")
 
-        write_partition(
+        partition_file = write_partition(
             partition_type="graph",
             partition_membership=membership,
             language=args.language,
