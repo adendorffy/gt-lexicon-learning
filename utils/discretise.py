@@ -96,6 +96,7 @@ def extract_units(
 
     model = build_model(language, model_name, layer, k)
     codebook = torch.from_numpy(model.cluster_centers_).type(torch.float32)
+    print(f"Codebook shape: {codebook.shape}")
 
     units_dir = Path(f"units/{language}/{dataset}/{model_name}/{layer}/k{k}/{lmbda}")
     units_dir.mkdir(parents=True, exist_ok=True)

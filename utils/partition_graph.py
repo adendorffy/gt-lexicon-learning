@@ -12,46 +12,56 @@ def CPM_partition(
     max_iterations: int = 25,
     diff_tolerance: int = 10,
     initialise_with: List[int] = None
-) -> List[int]:
+) -> Tuple[List[List[int]], float]:
     """
-    Apply the Constant Potts Model (CPM) for community detection on a graph.
+    Apply the Constant Potts Model (CPM) for community detection on a graph,
+    adjusting the resolution parameter until the target number of clusters
+    is reached (within tolerance).
+
+    Uses Leiden with warm-starting (`initial_membership`) so that each iteration
+    refines the previous clustering instead of restarting.
 
     Args:
         g: iGraph graph object.
-        resolution: Resolution parameter for CPM.
-        n_clusters: Desired number of clusters (8_216 for default = english dev set).
+        n_clusters: Desired number of clusters (default = 8_216).
+        resolution: Initial resolution parameter for CPM.
         max_iterations: Maximum number of iterations for the optimiser.
-        diff_tolerance: Tolerance for convergence (number of iterations with no change).
-        initialise_with: Optional initial membership list for the vertices.
+        diff_tolerance: Acceptable difference between target and found clusters.
+        initialise_with: Optional initial membership list.
 
     Returns:
-        List of community assignments for each vertex in the graph.
+        Tuple of:
+            - Best partition (leidenalg.Partition).
+            - Runtime in seconds.
     """
+    start_time = time()
     partition_type = la.CPMVertexPartition
     lr = 0.1
     best_diff = float("inf")
+    best_partition = None
+    patience_counter = 0
 
-    partition = partition_type(g, resolution_parameter=resolution)
-    start_time = time()
+    partition = la.find_partition(
+        g,
+        partition_type,
+        weights="weight",
+        resolution_parameter=resolution,
+        initial_membership=initialise_with,
+        seed=42,
+    )
+
     for i in range(max_iterations):
-        partition = la.find_partition(
-            g,
-            la.CPMVertexPartition,
-            weights="weight",
-            resolution_parameter=resolution,
-            initial_membership=initialise_with,
-            seed=42,
-        )
         curr_clusters = len(set(partition.membership))
         diff = curr_clusters - n_clusters
-        print(
-            f"[Iter {i + 1:02}] res={resolution:.8f} → clusters={n_clusters}, diff={diff:+d}, lr={lr:.6f}"
-        )
+
+        print(f"[Iter {i+1:02}] res={partition.resolution_parameter:.6f}, "
+                  f"clusters={curr_clusters}, diff={diff:+d}")
 
         if abs(diff) <= diff_tolerance:
-            print(f"Acceptable resolution found. Res: {resolution:.8f}")
+            print(f"✅ Acceptable resolution found. Res: {resolution:.8f}")
+            best_partition = partition
             break
-
+        
         if abs(diff) < abs(best_diff):
             best_diff = diff
             best_partition = partition
@@ -60,16 +70,26 @@ def CPM_partition(
             print("Same difference as best, keeping previous best partition.")
         else:
             patience_counter += 1
-        
+
+
         if patience_counter >= 1:
             lr *= 0.5
-            print(f"Reducing learning rate to {lr:.6f}")
+            print(f"⚠️ Reducing learning rate to {lr:.6f}")
             patience_counter = 0
 
         diff_clipped = max(min(diff, 2 * n_clusters), -2 * n_clusters)
         step = lr * (diff_clipped / n_clusters)
         resolution = min(max(resolution - step, -10), 10)
         lr *= 0.9
+
+        partition = la.find_partition(
+            g,
+            partition_type,
+            weights="weight",
+            resolution_parameter=resolution,
+            initial_membership=partition.membership,
+            seed=42,
+        )
 
     end_time = time()
     return best_partition, end_time - start_time
@@ -181,7 +201,7 @@ def find_partition(partition_type, language, dataset, model_name, layer, distanc
         if k is not None and lmbda is not None:
             partition_path = partitions_dir / f"{distance_type}_{k}_{lmbda}_{threshold}_*.txt"
         else:
-            partition_path = partitions_dir / f"{distance_type}_{threshold}_*_txt"
+            partition_path = partitions_dir / f"{distance_type}_{threshold}_*.txt"
 
     elif partition_type in ["kmeans", "birch", "agg"]: 
         partition_path = partitions_dir / f"{partition_type}_*.txt"

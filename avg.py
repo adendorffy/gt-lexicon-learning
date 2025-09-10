@@ -92,16 +92,18 @@ def main(args: Namespace) -> None:
             k=None,
             lmbda=None
         )
-        
+
     total_time = int(partition_file.stem.split("_")[-1])
     evaluate_partition_file(
         partition_file, args.language, args.dataset, args.model_name, total_time, 
     )
 
+
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run discrete ED graph processing.")
+    parser = argparse.ArgumentParser(description="Clusters word-level features into partitions.")
+
     parser.add_argument("language", type=str, help="Language code for processing.")
     parser.add_argument("dataset", type=str, help="Dataset name for processing.")
     parser.add_argument("model_name", type=str, help="Model name for processing.")

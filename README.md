@@ -1,47 +1,92 @@
-# Ground Rruth Lexicon Learning
-6 lexicon learning systems built using different methods of representing input speech and clustering word segments, given the ground truth word boundaries.
+# Ground Truth Lexicon Learning
 
-Get the boundaries from the provided ground-truth alignment files:
-```
-python boundaries.py $language $dataset 
-```
+This repository provides **six lexicon learning systems** that cluster word segments based on different representations of input speech, using **ground-truth word boundaries**.
 
-For mandarin, get the "VAD" alignment which just cuts the utterance into segments that are short enough to process.
-```
-python vad.py 
-```
+![Overview](pipeline.png)
 
-## Graph clustering:
-For all these there are the following options for model_name: ``wavlm-large``, ``hubert-large``, ``hubert-soft``, ``mhubert``, ``mandarin-hubert``
+---
 
-1. Continuous features + Averaging + Cosine distance 
-```
-python graph.py $language $dataset $model_name $layer cos $threshold
-```
+## Directory Structure
 
-2. Continuous features  + DTW distance 
-```
-python graph.py $language $dataset $model_name $layer dtw $threshold
-```
-
-3. Discrete units + Edit distance 
-```
-python graph.py $language $dataset $model_name $layer ed $threshold --k $k --lmbda $lmbda
-```
-
-## Traditional clustering
-1. Continuous features + Averaging + K-means
-```
-python avg.py $language $dataset $model_name $layer kmeans 
-```
-
-2. Continuous features + Averaging + BIRCH
-```
-python avg.py $language $dataset $model_name $layer birch
+Data should be organized as follows:
 
 ```
+Data/alignments/<language>/<dataset>/
+Data/audio/<language>/<dataset>/
+```
 
-3. Continuous features + Averaging + Agglomerative Hierarchical 
+---
+
+## Ground Truth Boundary Extraction
+
+Extract word boundaries from the provided alignment files:
+
+```bash
+python boundaries.py <language> <dataset>
 ```
-python avg.py $language $dataset $model_name $layer agg 
+
+For **Mandarin**, extract voice activity detection (VAD) segments to split long utterances into smaller, processable segments:
+
+```bash
+python vad.py
 ```
+
+---
+
+## Graph-based Clustering
+
+Supported `model_name` options:
+
+```
+wavlm-large, hubert-large, hubert-soft, mhubert, mandarin-hubert
+```
+
+### 1. Continuous Features + Averaging + Cosine Distance
+
+```bash
+python graph.py <language> <dataset> <model_name> <layer> cos <threshold>
+```
+
+### 2. Continuous Features + Dynamic Time Warping (DTW)
+
+```bash
+python graph.py <language> <dataset> <model_name> <layer> dtw <threshold>
+```
+
+### 3. Discrete Units + Edit Distance
+
+```bash
+python graph.py <language> <dataset> <model_name> <layer> ed <threshold> --k <k> --lmbda <lambda>
+```
+
+---
+
+## Traditional Clustering
+
+### 1. Continuous Features + Averaging + K-means
+
+```bash
+python avg.py <language> <dataset> <model_name> <layer> kmeans
+```
+
+### 2. Continuous Features + Averaging + BIRCH
+
+```bash
+python avg.py <language> <dataset> <model_name> <layer> birch
+```
+
+### 3. Continuous Features + Averaging + Agglomerative Hierarchical
+
+```bash
+python avg.py <language> <dataset> <model_name> <layer> agg
+```
+
+---
+
+### Tips
+
+* Replace placeholders `<language>`, `<dataset>`, `<model_name>`, `<layer>`, `<threshold>`, `<k>`, and `<lambda>` with appropriate values.
+* Recommended to start with smaller datasets to test the pipeline before running full-scale experiments.
+
+---
+

@@ -204,14 +204,13 @@ def extract_wrd_boundaries(dataset: str) -> Optional[pd.DataFrame]:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Extract ground truth boundaries from TextGrid or WRD files."
-    )
+    parser = argparse.ArgumentParser(description="Extract ground truth boundaries from TextGrid or WRD files.")
+
     parser.add_argument(
         "language",
         type=str,
-        choices=["english", "mandarin", "wolof"],
-        help="Language of the dataset (english or other).",
+        choices=["english", "mandarin"],
+        help="Language of the dataset (english or mandarin).",
     )
     parser.add_argument(
         "dataset",
