@@ -1,11 +1,25 @@
 
 from utils.extract_features import load_features
-from utils.build_graph import chunk_indices
 from sklearn.cluster import MiniBatchKMeans
 from pathlib import Path
 import joblib
 from tqdm import tqdm
 import numpy as np
+from typing import Generator, List
+
+def chunk_indices(n: int, batch_size: int) -> Generator[List[int], None, None]:
+    """
+    Yield index batches of size `batch_size` until `n` is exhausted.
+
+    Args:
+        n: Total number of items.
+        batch_size: Number of items per batch.
+
+    Yields:
+        List of indices for the current batch.
+    """
+    for i in range(0, n, batch_size):
+        yield range(i, min(i + batch_size, n))
 
 def build_model(
     language: str,

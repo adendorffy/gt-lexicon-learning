@@ -146,10 +146,8 @@ def load_cut_features(
         features: List of embeddings (as NumPy arrays).
         paths: List of corresponding filenames (stems).
     """
-    if language == "english":
-        cut_dir = Path(f"cut_features/english/{dataset}/{model_name}/{layer}")
-    elif language == "mandarin":
-        cut_dir = Path(f"cut_features/mandarin/{dataset}/{model_name}/{layer}")
+    if language == "english" or language == "mandarin":
+        cut_dir = Path(f"cut_features/{language}/{dataset}/{model_name}/{layer}")
     else:
         print(f"Language {language} not supported.")
         return [], []
@@ -167,7 +165,7 @@ def load_cut_features(
     features = []
     paths = []
 
-    for file in cut_files:
+    for file in tqdm(cut_files, desc="Loading cut features"):
         embedding = np.load(file)
         features.append(embedding)
         paths.append(file.stem)

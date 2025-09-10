@@ -59,7 +59,7 @@ def load_features(language: str, dataset: str, model_name: str, layer: int, for_
     features = [np.load(file).astype(np.float32) for file in feature_dir.glob("*.npy")]
     paths = [path.stem for path in feature_dir.glob("*.npy")]
 
-    if len(features) < len(audio_files):
+    if len(features) < len(audio_files) and not for_kmeans:
         print(f"Warning: Expected at least {len(audio_files)} features, but found {len(features)} in {feature_dir}. Re-extracting features.")
         extract_features(language, dataset, model_name, layer, for_kmeans)
         features = [np.load(file).astype(np.float32) for file in feature_dir.glob("*.npy")]

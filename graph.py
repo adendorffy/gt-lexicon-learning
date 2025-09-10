@@ -1,7 +1,32 @@
 from utils.build_graph import build_graph
+from utils.partition_graph import CPM_partition, write_partition
+from argparse import Namespace
+import pandas as pd
 
-def main(args):
-    g, total_time = build_graph(
+def main(args: Namespace) -> None:
+    """
+    Main entry point for graph-based clustering using CPM (Constant Potts Model).
+
+    This function:
+      1. Builds a similarity graph from word-level features.
+      2. Applies CPM graph partitioning.
+      3. Writes the resulting partition file to disk.
+
+    Args:
+        args (Namespace): Command-line arguments containing:
+            - language (str): Dataset language ("english" or "mandarin").
+            - dataset (str): Dataset split ("train", "dev", etc.).
+            - model_name (str): Feature extraction model name.
+            - layer (int): Feature layer index.
+            - threshold (float): Edge threshold for similarity graph.
+            - distance_type (str): Distance metric ("cos", etc.).
+            - k (Optional[int]): Number of clusters (if used).
+            - lmbda (Optional[float]): Regularization parameter (if applicable).
+
+    Returns:
+        None
+    """
+    g, graph_time = build_graph(
         language=args.language,
         dataset=args.dataset,
         model_name=args.model_name,
@@ -11,7 +36,28 @@ def main(args):
         k=args.k,
         lmbda=args.lmbda,
     )
-    print(f"Graph built in {total_time:.2f} seconds.")
+
+    boundary_df = pd.read_csv(f"Data/alignments/{args.language}/{args.dataset}_boundaries.csv")
+    num_clusters = len(set(boundary_df['text'].tolist()))
+
+    membership, partition_time = CPM_partition(g, num_clusters)
+    print(f"Graph partitioned in {partition_time:.2f} seconds.")
+
+    write_partition(
+        partition_type="graph",
+        partition_membership=membership,
+        language=args.language,
+        dataset=args.dataset,       
+        model_name=args.model_name,
+        layer=args.layer,
+        distance_type=args.distance_type,
+        threshold=args.threshold,
+        word_info = g.vs["name"],
+        total_time = graph_time + partition_time,
+        k=args.k,
+        lmbda=args.lmbda
+    )
+
 
     
 

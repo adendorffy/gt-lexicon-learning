@@ -2,7 +2,7 @@
 .env/
 Data/
 utils/installers/
-
+**/cython_dtw/
 
 *_features/ 
 units/
