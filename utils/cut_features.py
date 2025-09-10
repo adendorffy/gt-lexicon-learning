@@ -77,10 +77,10 @@ def cut_segment_features(dataset: str, model_name: str, layer: int) -> None:
     """
     features, paths = load_features("mandarin", dataset, model_name, layer)
 
-    vad_df = pd.read_csv(f"Data/boundaries/mandarin/{dataset}_vad.csv")
+    vad_df = pd.read_csv(f"Data/alignments/mandarin/{dataset}_vad.csv")
     vad_groups = vad_df.groupby(["filename", "seg_id"])
 
-    boundaries_df = pd.read_csv(f"Data/boundaries/mandarin/{dataset}_boundaries.csv")
+    boundaries_df = pd.read_csv(f"Data/alignments/mandarin/{dataset}_boundaries.csv")
     boundary_groups = boundaries_df.groupby("filename")
 
     save_dir = Path(f"cut_features/mandarin/{dataset}/{model_name}/{layer}")

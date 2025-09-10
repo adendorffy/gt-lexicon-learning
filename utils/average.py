@@ -9,7 +9,7 @@ from tqdm import tqdm
 from collections import defaultdict
 
 def apply_pca(
-    word_features: List[np.ndarray], num_components: int = 350
+    word_features: List[np.ndarray], num_components: int = 350, no_pca: bool = False
 ) -> List[np.ndarray]:
     """
     Applies PCA for dimensionality reduction on word-level feature sequences.
@@ -18,20 +18,22 @@ def apply_pca(
         word_features: List of word-level feature sequences, 
             where each item is a (T, D) array (T = time steps, D = feature dim).
         num_components: Number of PCA components to retain.
+        no_pca: If True, skip PCA and return mean-var normalised features.
 
     Returns:
         split_features: List of word-level features after PCA,
             each reduced to (T, num_components).
     """
-    pca = PCA(n_components=num_components)
     scaler = StandardScaler()
     
     lengths = [len(feat) for feat in word_features]
     word_features = np.vstack(word_features)
     word_features = scaler.fit_transform(word_features)
 
-    pca.fit(word_features)
-    word_features = pca.transform(word_features)
+    if not no_pca:
+        pca = PCA(n_components=num_components)
+        pca.fit(word_features)
+        word_features = pca.transform(word_features)
 
     split_features = []
     index = 0
@@ -73,13 +75,14 @@ def pooling(word_features: List[np.ndarray]) -> np.ndarray:
     return pooled_features
 
 
-def cluster_features_kmeans(word_features, n_clusters):
+def cluster_features_kmeans(word_features, n_clusters, centroids: List[np.ndarray] = None):
     """
     Cluster feature vectors using k-means (FAISS implementation).
 
     Args:
         word_features: 2D array of feature vectors (shape = [n_samples, n_features]).
         n_clusters: Number of clusters to form.
+        centroids: Optional initial centroids for k-means.
 
     Returns:
         labels: 1D array of cluster assignments for each feature vector.
@@ -90,7 +93,10 @@ def cluster_features_kmeans(word_features, n_clusters):
     acoustic_model = faiss.Kmeans(
         word_features.shape[1], n_clusters, niter=15, nredo=3, verbose=True
     )
-    acoustic_model.train(word_features, init_centroids=initial_centroids)
+    if centroids is not None:
+        acoustic_model.train(word_features, init_centroids=centroids)
+    else:
+        acoustic_model.train(word_features, init_centroids=initial_centroids)
 
     _, Index = acoustic_model.index.search(word_features, 1)
     labels = Index.flatten()

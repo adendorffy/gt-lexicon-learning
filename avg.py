@@ -60,7 +60,11 @@ def main(args: Namespace) -> None:
         print(f"Loaded {len(word_features)} word features.")
 
         start_time = time.time()
-        word_features = apply_pca(word_features)
+
+        if args.model_name == "hubert-soft":
+            word_features = apply_pca(word_features, no_pca = True)
+        else:
+            word_features = apply_pca(word_features)
         word_features = pooling(word_features)
 
         
