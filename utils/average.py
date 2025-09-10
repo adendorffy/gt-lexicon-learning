@@ -87,15 +87,19 @@ def cluster_features_kmeans(word_features, n_clusters, centroids: List[np.ndarra
     Returns:
         labels: 1D array of cluster assignments for each feature vector.
     """
-    sk_kmeans, _ = cluster.kmeans_plusplus(word_features, n_clusters, random_state=0)
-    initial_centroids = sk_kmeans.astype(np.float32)
 
+    print("Clustering with k-means...")
     acoustic_model = faiss.Kmeans(
         word_features.shape[1], n_clusters, niter=15, nredo=3, verbose=True
     )
+
     if centroids is not None:
+        print(f"Using provided centroids (with {centroids.shape} shape) for k-means initialization.")
         acoustic_model.train(word_features, init_centroids=centroids)
+
     else:
+        sk_kmeans, _ = cluster.kmeans_plusplus(word_features, n_clusters, random_state=0)
+        initial_centroids = sk_kmeans.astype(np.float32)
         acoustic_model.train(word_features, init_centroids=initial_centroids)
 
     _, Index = acoustic_model.index.search(word_features, 1)

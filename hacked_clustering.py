@@ -267,7 +267,7 @@ def hacked_kmeans() -> None:
     membership = convert_cluster_ids_to_partition(cluster_ids)
 
     partition_file = write_partition(
-        partition_type="hacked_kmeans",
+        partition_type="hacked_kmeans_clustering",
         partition_membership=membership,   
         language="english",
         dataset="test",
