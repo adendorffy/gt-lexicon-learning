@@ -1,5 +1,4 @@
 
-from utils.extract_features import load_features
 from sklearn.cluster import MiniBatchKMeans
 from pathlib import Path
 import joblib
@@ -51,28 +50,64 @@ def build_model(
         kmeans = MiniBatchKMeans(n_clusters=k)
         kmeans = joblib.load(model_path)
         return kmeans
-
+    
     if language == "english":
-        features, paths = load_features(language, "train", model_name, layer, for_kmeans=True)
+        dataset = "train"
     elif language == "mandarin":
-        features, paths = load_features(language, "dev", model_name, layer)
+        dataset = "dev"
     else:
-        raise ValueError("Unsupported language. Choose 'english' or 'mandarin'.")
+        raise ValueError("Language must be 'english' or 'mandarin'.")
     
     kmeans_model = MiniBatchKMeans(
         n_clusters=k, random_state=42, batch_size=batch_size, max_iter=100
     )
 
-    for batch in tqdm(
-        chunk_indices(len(features), batch_size),
-        total=(len(features) + batch_size - 1) // batch_size,
+    for batch_features in tqdm(
+        load_features_batched(language, dataset, model_name, layer, batch_size)[0],
+        total=load_features_batched(language, dataset, model_name, layer, batch_size)[1],
         desc="Training KMeans model",
     ):
-        batch_features = np.vstack(batch).astype(np.float64)
         kmeans_model.partial_fit(batch_features)
 
     joblib.dump(kmeans_model, model_path)
     print(f"KMeans model with k={k} saved to {model_path}.")
 
     return kmeans_model
+
+def load_features_batched(
+    language: str,
+    dataset: str,
+    model_name: str,
+    layer: int,
+    batch_size: int = 10_000
+) -> Generator[np.ndarray, None, None]:
+    """
+    Generator that yields batches of features from disk for a given language, dataset,
+    model, and layer, suitable for MiniBatchKMeans training.
+
+    Args:
+        language: "english" or "mandarin".
+        dataset: Name of the dataset, e.g., "train" or "dev".
+        model_name: Name of the feature extraction model.
+        layer: Layer index of features to load.
+        batch_size: Number of feature files to load per batch.
+
+    Yields:
+        np.ndarray: A 2D array of shape (batch_size, feature_dim) containing the features
+                    for the current batch. Last batch may be smaller than batch_size.
+    """
+    if language == "english":
+        feature_dir = Path(f"utterance_features/{language}/{dataset}/{model_name}/{layer}")
+    elif language == "mandarin":
+        feature_dir = Path(f"segment_features/{language}/{dataset}/{model_name}/{layer}")
+
+    feature_files = list(feature_dir.glob("*.npy"))
+    total_batches = (len(feature_files) + batch_size - 1) // batch_size
+    if not feature_files:
+        raise ValueError(f"No feature files found in {feature_dir}")
+    
+    for i in range(0, len(feature_files), batch_size):
+        batch_files = feature_files[i:i+batch_size]
+        batch_features = [np.load(f) for f in batch_files]
+        yield np.vstack(batch_features).astype(np.float64), total_batches
 

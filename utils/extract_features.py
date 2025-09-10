@@ -56,7 +56,7 @@ def load_features(language: str, dataset: str, model_name: str, layer: int, for_
         return []
     
     audio_files = get_audio_files(language, dataset)
-    features = [np.load(file).astype(np.float32) for file in feature_dir.glob("*.npy")]
+    features = [np.load(file).astype(np.float32) for file in tqdm(feature_dir.glob("*.npy"), desc="Loading features", total=len(list(feature_dir.glob("*.npy"))))]
     paths = [path.stem for path in feature_dir.glob("*.npy")]
 
     if len(features) < len(audio_files) and not for_kmeans:

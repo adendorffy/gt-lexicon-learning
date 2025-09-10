@@ -7,6 +7,7 @@ import numpy as np
 from pathlib import Path
 import pandas as pd
 import torch
+from tqdm import tqdm
 
 def load_units(
     language: str,
@@ -96,12 +97,11 @@ def extract_units(
 
     model = build_model(language, model_name, layer, k)
     codebook = torch.from_numpy(model.cluster_centers_).type(torch.float32)
-    print(f"Codebook shape: {codebook.shape}")
 
     units_dir = Path(f"units/{language}/{dataset}/{model_name}/{layer}/k{k}/{lmbda}")
     units_dir.mkdir(parents=True, exist_ok=True)
 
-    for feature, path in zip(features, paths):
+    for feature, path in tqdm(zip(features, paths), desc="Extracting units", total=len(paths)):
         if not isinstance(feature, torch.Tensor):
             feature = torch.tensor(feature, dtype=torch.float32)
             
