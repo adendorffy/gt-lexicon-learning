@@ -18,7 +18,7 @@ from typing import List, Tuple
 from pathlib import Path
 
 
-def build_ed_graph_no_saving(
+def build_ed_graph(
     language: str = "english",
     dataset: str = "test",
     model_name: str = "wavlm-large",
@@ -98,16 +98,19 @@ def get_true_types_from_paths(paths: List[str], boundary_df: pd.DataFrame) -> Li
         List[int]: List of true word types for each path. If a path does not match any row in
                    the boundary_df, -1 is appended and a warning is printed.
     """
+    unique_texts = boundary_df['text'].unique()
+    text2id = {t: i for i, t in enumerate(unique_texts)}
+
     true_types = []
     for path in paths:
         filename = path.split("_")[0]
         word_id = int(path.split("_")[1])
         row = boundary_df[(boundary_df['filename'] == filename) & (boundary_df['word_id'] == word_id)]
         if not row.empty:
-            true_types.append(row['text'].values[0])
+            text_value = row['text'].values[0]
+            true_types.append(text2id[text_value])
         else:
             print(f"Warning: No matching row found for {path}")
-            true_types.append(-1)  
     
     return true_types
         
@@ -124,38 +127,48 @@ def hacked_ed_graph() -> None:
             - res: CPM resolution parameter
     """
     
-    boundary_df = pd.read_csv(f"Data/alignments/{args.language}/{args.dataset}_boundaries.csv")
+    boundary_df = pd.read_csv("Data/alignments/english/test_boundaries.csv")
     num_clusters = len(set(boundary_df['text'].tolist()))   
 
-    g, paths = build_ed_graph_no_saving(
-        language=args.language,
-        dataset=args.dataset,
-        model_name=args.model_name,
-        layer=args.layer,
-        threshold=args.threshold,
-        k=args.k,
-        lmbda=args.lmbda,
-    )
+    graph_dir = Path("hacked_graphs/english/test/wavlm-large/21")
+    graph_dir.mkdir(parents=True, exist_ok=True)
+
+    graph_pattern = graph_dir / "ed_500_100.0_0.65_*.pkl"
+    if len(list(graph_pattern.parent.glob(graph_pattern.name))) > 0:
+        print("Graph already exists, loading from disk.")
+        g = ig.Graph.Read_Pickle(str(list(graph_pattern.parent.glob(graph_pattern.name))[0]))
+        paths = g.vs["name"]
+    else:
+        g, paths = build_ed_graph(
+            language="english",
+            dataset="test",
+            model_name="wavlm-large",
+            layer=21,
+            threshold=0.65,
+            k=500,
+            lmbda=100.0,
+        )
+    
     true_types = get_true_types_from_paths(paths, boundary_df)
 
-    membership, _ = CPM_partition(g, num_clusters, args.res, initialise_with=true_types)
+    membership, _ = CPM_partition(g, num_clusters, resolution=0.3, initialise_with=true_types)
     partition_file = write_partition(
         partition_type="hacked_graph",
         partition_membership=membership,   
-        language=args.language,
-        dataset=args.dataset,
-        model_name=args.model_name,
-        layer=args.layer,
+        language="english",
+        dataset="test",
+        model_name="wavlm-large",
+        layer=21,
         distance_type="ed",
-        threshold=args.threshold,
+        threshold=0.65,
         word_info = g.vs["name"],
         total_time = 0.0,
-        k=args.k,
-        lmbda=args.lmbda
+        k=500,
+        lmbda=100.0
     )
 
     evaluate_partition_file(
-        partition_file, args.language, args.dataset, args.model_name, 0.0,
+        partition_file, "english", "test", "wavllm-large", 0.0,
     )
 
 
@@ -211,7 +224,7 @@ def load_hacked_features(
     start = 0
     for length in tqdm(lengths, desc="Splitting features"):
         end = start + length
-        split_features.append(all_features[start:end, :])
+        split_features.append(all_features[start:end, :].mean(axis=0))
         start = end
     assert len(split_features) == len(all_paths)
 
@@ -241,7 +254,7 @@ def load_hacked_features(
         word_mean = np.mean(token_features, axis=0)
         centroids_dict[word_type] = word_mean
 
-    return all_features, all_paths, np.stack(list(centroids_dict.values())).astype(np.float32)
+    return split_features, all_paths, np.stack(list(centroids_dict.values())).astype(np.float32)
 
 
 def hacked_kmeans() -> None:
@@ -259,8 +272,8 @@ def hacked_kmeans() -> None:
         layer=21,
     )
     features = normalize(
-            np.stack(features, axis=0), axis=1, norm="l2"
-        ).astype(np.float64)
+        np.stack(features, axis=0), axis=1, norm="l2"
+    ).astype(np.float64)
 
     
     cluster_ids = cluster_features_kmeans(features, num_clusters, centroids)

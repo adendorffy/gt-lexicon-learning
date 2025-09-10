@@ -146,7 +146,7 @@ def write_partition(
         else:
             partitions_path = partitions_dir / f"{distance_type}_{threshold}_{round(total_time)}.txt"
 
-    elif partition_type in ["kmeans", "birch", "agg"]: 
+    else:
         partitions_path = partitions_dir / f"{partition_type}_{round(total_time)}.txt"
     
 
