@@ -1,7 +1,7 @@
 from utils.partition_graph import CPM_partition, write_partition
 from utils.evaluate_partition import evaluate_partition_file
 from utils.build_graph import chunk_indices
-from utils.average import cluster_features_kmeans, convert_cluster_ids_to_partition, pooling, apply_pca
+from utils.average import cluster_features_kmeans, convert_cluster_ids_to_partition
 
 import pandas as pd
 import numpy as np
@@ -94,7 +94,7 @@ def load_hacked_features(
     all_paths = []
     lengths = []
 
-    feature_dir = Path(f"cut_features/{language}/{dataset}/gt/{model_name}/{layer}/utterance/")
+    feature_dir = Path(f"cut_features/{language}/{dataset}/{model_name}/{layer}/")
     file_paths = sorted(feature_dir.glob("*.npy"))
     for path in tqdm(file_paths, desc="Loading features"):
         features = np.load(path)
@@ -121,7 +121,6 @@ def load_hacked_features(
     centroids_dict = {}
 
     for group in tqdm(grouped_by_text, desc="Creating hacked features"):
-        word_type = group[0]
         group_df = group[1]
 
         token_features = []
@@ -141,14 +140,13 @@ def load_hacked_features(
 
         token_features = np.vstack(token_features)
         word_mean = np.mean(token_features, axis=0)
-        centroids_dict[word_type] = word_mean
 
         for feat in token_features:
             noise = np.random.normal(0, noise_std, size=feat.shape)
             hacked_feat = word_mean + noise
             hacked_features.append(hacked_feat)
 
-    return hacked_features, all_paths, np.stack(list(centroids_dict.values())).astype(np.float32)
+    return hacked_features, all_paths
 
     
 def build_hacked_ed_graph(
@@ -270,7 +268,7 @@ def hacked_kmeans() -> None:
     boundary_df = pd.read_csv("Data/alignments/english/test_boundaries.csv")
     num_clusters = len(set(boundary_df['text'].tolist()))   
 
-    features, paths, centroids = load_hacked_features(
+    features, paths = load_hacked_features(
         language="english",
         dataset="test",
         model_name="wavlm-large",
@@ -281,7 +279,7 @@ def hacked_kmeans() -> None:
         ).astype(np.float64)
 
     
-    cluster_ids = cluster_features_kmeans(features, num_clusters, centroids)
+    cluster_ids = cluster_features_kmeans(features, num_clusters)
     membership = convert_cluster_ids_to_partition(cluster_ids)
 
     partition_file = write_partition(
