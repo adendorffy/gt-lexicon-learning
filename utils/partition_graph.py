@@ -203,12 +203,10 @@ def find_partition(partition_type, language, dataset, model_name, layer, distanc
         else:
             partition_path = partitions_dir / f"{distance_type}_{threshold}_*.txt"
 
-    elif partition_type in ["kmeans", "birch", "agg"]: 
+    else: 
         partition_path = partitions_dir / f"{partition_type}_*.txt"
     
-    else:
-        raise ValueError(f"Unsupported partition type: {partition_type}")
-    
+  
     matching_files = list(partitions_dir.glob(partition_path.name))
     if matching_files:
         latest_file = max(matching_files, key=lambda f: f.stat().st_mtime)

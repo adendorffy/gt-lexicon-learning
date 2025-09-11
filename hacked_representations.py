@@ -1,4 +1,4 @@
-from utils.partition_graph import CPM_partition, write_partition
+from utils.partition_graph import CPM_partition, write_partition, find_partition
 from utils.evaluate_partition import evaluate_partition_file
 from utils.build_graph import chunk_indices
 from utils.average import cluster_features_kmeans, convert_cluster_ids_to_partition
@@ -175,42 +175,57 @@ def build_hacked_ed_graph(
     Returns:
         ig.Graph: Graph with nodes as embeddings and weighted edges based on similarity.
     """
-    features, paths = load_hacked_units(language, dataset, model_name, layer, k, lmbda)
-    g = ig.Graph()
-    g.add_vertices(len(features))
-    g.vs["name"] = paths
 
-    def compute_edges_batch(i_range):
-        """
-        Compute similarity edges for a batch of utterance indices.
+    graph_dir = Path(f"hacked_representations_graphs/{language}/{dataset}/{model_name}/{layer}/k{k}/{lmbda}/")
+    graph_dir.mkdir(parents=True, exist_ok=True)
 
-        Args:
-            i_range: Range of node indices (subset of utterances) to process.
+    graph_pattern = graph_dir / f"graph_ed_{threshold:.2f}_*.pkl"
+    existing_graphs = list(graph_pattern.parent.glob(graph_pattern.name))
+    if existing_graphs:
+        print(f"Graph already exists at {existing_graphs[0]}, loading it.")
+        return ig.Graph.Read_Pickle(str(existing_graphs[0]))
 
-        Returns:
-            batch_edges: List of (i, j, weight) tuples, where
-                - i, j: Node indices for connected utterances.
-                - weight: Similarity score = 1 - normalized edit distance.
-        """
-        batch_edges = []
-        for i in i_range:
-            seq_i = features[i]
-            for j in range(i + 1, len(features)):
-                seq_j = features[j]
+    else:
 
-                dist = editdistance.normalized_distance(seq_i, seq_j)
+        features, paths = load_hacked_units(language, dataset, model_name, layer, k, lmbda)
+        g = ig.Graph()
+        g.add_vertices(len(features))
+        g.vs["name"] = paths
 
-                if dist < threshold:
-                    batch_edges.append((i, j, 1 - dist))
-        return batch_edges
-    
-    edge_batches = Parallel(n_jobs=-1)(
-        delayed(compute_edges_batch)(batch)
-        for batch in tqdm(list(chunk_indices(len(features), batch_size)), desc="Computing edges")
-    )
-    edges = [edge for batch in edge_batches for edge in batch]
-    g.add_edges([(i, j) for i, j, _ in edges])
-    g.es["weight"] = [w for _, _, w in edges]
+        def compute_edges_batch(i_range):
+            """
+            Compute similarity edges for a batch of utterance indices.
+
+            Args:
+                i_range: Range of node indices (subset of utterances) to process.
+
+            Returns:
+                batch_edges: List of (i, j, weight) tuples, where
+                    - i, j: Node indices for connected utterances.
+                    - weight: Similarity score = 1 - normalized edit distance.
+            """
+            batch_edges = []
+            for i in i_range:
+                seq_i = features[i]
+                for j in range(i + 1, len(features)):
+                    seq_j = features[j]
+
+                    dist = editdistance.normalized_distance(seq_i, seq_j)
+
+                    if dist < threshold:
+                        batch_edges.append((i, j, 1 - dist))
+            return batch_edges
+        
+        edge_batches = Parallel(n_jobs=-1)(
+            delayed(compute_edges_batch)(batch)
+            for batch in tqdm(list(chunk_indices(len(features), batch_size)), desc="Computing edges")
+        )
+        edges = [edge for batch in edge_batches for edge in batch]
+        g.add_edges([(i, j) for i, j, _ in edges])
+        g.es["weight"] = [w for _, _, w in edges]
+
+        graph_path = graph_dir / f"graph_ed_{threshold:.2f}_0.0.pkl"
+        g.write_pickle(str(graph_path))
 
     return g
 
@@ -224,36 +239,47 @@ def hacked_ed_graph() -> None:
     
     boundary_df = pd.read_csv("Data/alignments/english/test_boundaries.csv")
     num_clusters = len(set(boundary_df['text'].tolist()))   
-
-    g = build_hacked_ed_graph(
-        language="english",
-        dataset="test",
-        model_name="wavlm-large",
-        layer=21,
-        threshold=0.65,
-        k=500,
-        lmbda=0,
-        batch_size=1_000
-    )
-
-    membership, _ = CPM_partition(g, num_clusters, args.res)
-    partition_file = write_partition(
+    partition_file = find_partition(
         partition_type="hacked_graph",
-        partition_membership=membership,   
         language="english",
         dataset="test",
         model_name="wavlm-large",
         layer=21,
         distance_type="ed",
         threshold=0.65,
-        word_info = g.vs["name"],
-        total_time = 0.0,
-        k=500,
-        lmbda=0
+        k= 500,
+        lmbda=100
     )
+    if partition_file is None:
+        g = build_hacked_ed_graph(
+            language="english",
+            dataset="test",
+            model_name="wavlm-large",
+            layer=21,
+            threshold=0.65,
+            k=500,
+            lmbda=0,
+            batch_size=1_000
+        )
+
+        membership, _ = CPM_partition(g, num_clusters, args.res)
+        partition_file = write_partition(
+            partition_type="hacked_graph",
+            partition_membership=membership,   
+            language="english",
+            dataset="test",
+            model_name="wavlm-large",
+            layer=21,
+            distance_type="ed",
+            threshold=0.65,
+            word_info = g.vs["name"],
+            total_time = 0.0,
+            k=500,
+            lmbda=0
+        )
 
     evaluate_partition_file(
-        partition_file, "english", "test", "wavlm-large", 0.0, threshold=0.65, k=500, lmbda=0
+        partition_file, "english", "test", "wavlm-large", 0.0, threshold=0.65, k=500, lmbda=100
     )
 
 
@@ -267,34 +293,46 @@ def hacked_kmeans() -> None:
     boundary_df = pd.read_csv("Data/alignments/english/test_boundaries.csv")
     num_clusters = len(set(boundary_df['text'].tolist()))   
 
-    features, paths = load_hacked_features(
-        language="english",
-        dataset="test",
-        model_name="wavlm-large",
-        layer=21,
-    )
-    features = normalize(
-            np.stack(features, axis=0), axis=1, norm="l2"
-        ).astype(np.float64)
-
-    
-    cluster_ids = cluster_features_kmeans(features, num_clusters)
-    membership = convert_cluster_ids_to_partition(cluster_ids)
-
-    partition_file = write_partition(
+    partition_file = find_partition(
         partition_type="hacked_kmeans",
-        partition_membership=membership,   
         language="english",
         dataset="test",
         model_name="wavlm-large",
         layer=21,
         distance_type=None,
         threshold=None,
-        word_info = paths,
-        total_time = 0.0,
         k=None,
         lmbda=None
     )
+    if partition_file is None:
+        features, paths = load_hacked_features(
+            language="english",
+            dataset="test",
+            model_name="wavlm-large",
+            layer=21,
+        )
+        features = normalize(
+                np.stack(features, axis=0), axis=1, norm="l2"
+            ).astype(np.float64)
+
+        
+        cluster_ids = cluster_features_kmeans(features, num_clusters)
+        membership = convert_cluster_ids_to_partition(cluster_ids)
+
+        partition_file = write_partition(
+            partition_type="hacked_kmeans",
+            partition_membership=membership,   
+            language="english",
+            dataset="test",
+            model_name="wavlm-large",
+            layer=21,
+            distance_type=None,
+            threshold=None,
+            word_info = paths,
+            total_time = 0.0,
+            k=None,
+            lmbda=None
+        )
 
     evaluate_partition_file(
         partition_file, "english", "test", "wavlm-large", 0.0

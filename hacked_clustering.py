@@ -1,8 +1,8 @@
-from utils.partition_graph import CPM_partition, write_partition
+from utils.partition_graph import CPM_partition, write_partition, find_partition
 from utils.evaluate_partition import evaluate_partition_file
 from utils.build_graph import chunk_indices
 from utils.discretise import load_units
-from utils.average import cluster_features_kmeans, convert_cluster_ids_to_partition, pooling, apply_pca
+from utils.average import cluster_features_kmeans, convert_cluster_ids_to_partition
 
 
 from argparse import Namespace
@@ -130,42 +130,56 @@ def hacked_ed_graph() -> None:
     boundary_df = pd.read_csv("Data/alignments/english/test_boundaries.csv")
     num_clusters = len(set(boundary_df['text'].tolist()))   
 
-    graph_dir = Path("hacked_graphs/english/test/wavlm-large/21")
-    graph_dir.mkdir(parents=True, exist_ok=True)
-
-    graph_pattern = graph_dir / "ed_500_100.0_0.65_*.pkl"
-    if len(list(graph_pattern.parent.glob(graph_pattern.name))) > 0:
-        print("Graph already exists, loading from disk.")
-        g = ig.Graph.Read_Pickle(str(list(graph_pattern.parent.glob(graph_pattern.name))[0]))
-        paths = g.vs["name"]
-    else:
-        g, paths = build_ed_graph(
-            language="english",
-            dataset="test",
-            model_name="wavlm-large",
-            layer=21,
-            threshold=0.65,
-            k=500,
-            lmbda=100.0,
-        )
-    
-    true_types = get_true_types_from_paths(paths, boundary_df)
-
-    membership, _ = CPM_partition(g, num_clusters, resolution=0.3, initialise_with=true_types)
-    partition_file = write_partition(
-        partition_type="hacked_graph",
-        partition_membership=membership,   
+    partition_file = find_partition(
+        partition_type="hacked_graph_clustering",
         language="english",
         dataset="test",
         model_name="wavlm-large",
         layer=21,
         distance_type="ed",
         threshold=0.65,
-        word_info = g.vs["name"],
-        total_time = 0.0,
         k=500,
         lmbda=100.0
     )
+    if partition_file is None:
+
+        graph_dir = Path("hacked_clustering_graphs/english/test/wavlm-large/21")
+        graph_dir.mkdir(parents=True, exist_ok=True)
+
+        graph_pattern = graph_dir / "ed_500_100.0_0.65_*.pkl"
+        if len(list(graph_pattern.parent.glob(graph_pattern.name))) > 0:
+            print("Graph already exists, loading from disk.")
+            g = ig.Graph.Read_Pickle(str(list(graph_pattern.parent.glob(graph_pattern.name))[0]))
+            paths = g.vs["name"]
+        else:
+            g, paths = build_ed_graph(
+                language="english",
+                dataset="test",
+                model_name="wavlm-large",
+                layer=21,
+                threshold=0.65,
+                k=500,
+                lmbda=100.0,
+            )
+            g.write_pickle(graph_dir / "ed_500_100.0_0.65_0.0.pkl")
+    
+        true_types = get_true_types_from_paths(paths, boundary_df)
+
+        membership, _ = CPM_partition(g, num_clusters, resolution=0.3144, initialise_with=true_types)
+        partition_file = write_partition(
+            partition_type="hacked_graph",
+            partition_membership=membership,   
+            language="english",
+            dataset="test",
+            model_name="wavlm-large",
+            layer=21,
+            distance_type="ed",
+            threshold=0.65,
+            word_info = g.vs["name"],
+            total_time = 0.0,
+            k=500,
+            lmbda=100.0
+        )
 
     evaluate_partition_file(
         partition_file, "english", "test", "wavllm-large", 0.0,
@@ -265,34 +279,47 @@ def hacked_kmeans() -> None:
     boundary_df = pd.read_csv("Data/alignments/english/test_boundaries.csv")
     num_clusters = len(set(boundary_df['text'].tolist()))   
 
-    features, paths, centroids = load_hacked_features(
-        language="english",
-        dataset="test",
-        model_name="wavlm-large",
-        layer=21,
-    )
-    features = normalize(
-        np.stack(features, axis=0), axis=1, norm="l2"
-    ).astype(np.float64)
-
-    
-    cluster_ids = cluster_features_kmeans(features, num_clusters, centroids)
-    membership = convert_cluster_ids_to_partition(cluster_ids)
-
-    partition_file = write_partition(
+    partition_file = find_partition(
         partition_type="hacked_kmeans_clustering",
-        partition_membership=membership,   
         language="english",
         dataset="test",
         model_name="wavlm-large",
         layer=21,
         distance_type=None,
         threshold=None,
-        word_info = paths,
-        total_time = 0.0,
         k=None,
         lmbda=None
     )
+    if partition_file is None:
+        
+        features, paths, centroids = load_hacked_features(
+            language="english",
+            dataset="test",
+            model_name="wavlm-large",
+            layer=21,
+        )
+        features = normalize(
+            np.stack(features, axis=0), axis=1, norm="l2"
+        ).astype(np.float64)
+
+        
+        cluster_ids = cluster_features_kmeans(features, num_clusters, centroids)
+        membership = convert_cluster_ids_to_partition(cluster_ids)
+
+        partition_file = write_partition(
+            partition_type="hacked_kmeans_clustering",
+            partition_membership=membership,   
+            language="english",
+            dataset="test",
+            model_name="wavlm-large",
+            layer=21,
+            distance_type=None,
+            threshold=None,
+            word_info = paths,
+            total_time = 0.0,
+            k=None,
+            lmbda=None
+        )
 
     evaluate_partition_file(
         partition_file, "english", "test", "wavlm-large", 0.0
