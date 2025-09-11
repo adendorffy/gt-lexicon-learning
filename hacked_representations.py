@@ -8,7 +8,7 @@ import numpy as np
 from tqdm import tqdm   
 import igraph as ig
 from sklearn.preprocessing import StandardScaler, normalize
-from sklearn.decomposition import PCA
+from sklearn.decomposition import IncrementalPCA
 import rapidfuzz.distance.Levenshtein as editdistance
 from joblib import Parallel, delayed
 from typing import List, Tuple
@@ -87,37 +87,38 @@ def load_hacked_features(
     boundary_df = pd.read_csv(f"Data/alignments/{language}/{dataset}_boundaries.csv")
     grouped_by_text = boundary_df.groupby('text')
 
-    pca = PCA(n_components=350)
     scaler = StandardScaler()
+    pca = IncrementalPCA(n_components=350, batch_size=10_000)
 
     all_features = []
-    all_paths = []
-    lengths = []
 
     feature_dir = Path(f"cut_features/{language}/{dataset}/{model_name}/{layer}/")
     file_paths = sorted(feature_dir.glob("*.npy"))
-    for path in tqdm(file_paths, desc="Loading features"):
-        features = np.load(path)
+
+    for path in tqdm(file_paths, desc="Fitting scaler"):
+        features = np.load(path, mmap_mode="r")  
+        scaler.partial_fit(features)
         all_features.append(features)
-        all_paths.append(str(path.stem))
-        lengths.append(len(features))
 
+    all_features = np.vstack(all_features)
+    all_features = scaler.transform(all_features)
 
-    all_features = scaler.fit_transform(np.vstack(all_features))
-    all_features = pca.fit_transform(all_features)
-    print(f"Loaded and PCA-reduced features shape: {all_features.shape}")
+    pca.fit(all_features)
+    
+    all_features = []
+    for path in tqdm(file_paths, desc="Transforming features"):
+        features = np.load(path, mmap_mode="r")
+        features = scaler.transform(features)
+        reduced = pca.transform(features)
+        pooled = np.mean(reduced, axis=0)
+        all_features.append(pooled)
 
+    print(f"Loaded and PCA-reduced: {len(all_features)} features with {all_features[0].shape} shape each")
+    assert len(all_features) == len(file_paths), "Mismatch in number of feature files and paths"
 
-    split_features = []
-    start = 0
-    for length in tqdm(lengths, desc="Splitting features"):
-        end = start + length
-        split_features.append(all_features[start:end, :])
-        start = end
-    assert len(split_features) == len(all_paths)
-
+    file_paths = [p.stem for p in file_paths]
     hacked_features = []
-    path_to_idx = {p: i for i, p in enumerate(all_paths)}
+    path_to_idx = {p: i for i, p in enumerate(file_paths)}
 
     for group in tqdm(grouped_by_text, desc="Creating hacked features"):
         group_df = group[1]
@@ -131,7 +132,7 @@ def load_hacked_features(
             token_id = f"{filename}_{word_id}"
             if token_id in path_to_idx:
                 idx = path_to_idx[token_id]
-                token_features.append(split_features[idx])
+                token_features.append(all_features[idx])
                 token_ids.append(token_id)
 
         if len(token_features) == 0:
@@ -140,12 +141,16 @@ def load_hacked_features(
         token_features = np.vstack(token_features)
         word_mean = np.mean(token_features, axis=0)
 
-        for feat in token_features:
-            noise = np.random.normal(0, noise_std, size=feat.shape)
+        for _ in range(len(group_df)):
+            noise = np.random.normal(0, noise_std, size=word_mean.shape)
             hacked_feat = word_mean + noise
             hacked_features.append(hacked_feat)
 
-    return hacked_features, all_paths
+    assert len(hacked_features) == len(file_paths), f"Mismatch in total hacked features and paths: {len(hacked_features)} vs {len(file_paths)}"
+
+    print(f"Total hacked features created: {len(hacked_features)} with shape: {hacked_features[0].shape}")
+
+    return hacked_features, file_paths
 
     
 def build_hacked_ed_graph(
