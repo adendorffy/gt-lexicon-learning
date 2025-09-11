@@ -254,8 +254,10 @@ def hacked_ed_graph(res: float = None) -> None:
             lmbda=100.0,
             batch_size=1_000
         )
+        if res is None:
+            res = 0.3
 
-        membership, _ = CPM_partition(g, num_clusters, 0.3)
+        membership, _ = CPM_partition(g, num_clusters, res)
         partition_file = write_partition(
             partition_type="hacked_graph",
             partition_membership=membership,   
