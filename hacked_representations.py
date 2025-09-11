@@ -1,7 +1,7 @@
 from utils.partition_graph import CPM_partition, write_partition, find_partition
 from utils.evaluate_partition import evaluate_partition_file
 from utils.build_graph import chunk_indices
-from utils.average import cluster_features_kmeans, convert_cluster_ids_to_partition
+from utils.average import cluster_features_kmeans, convert_cluster_ids_to_partition, apply_pca, pooling
 
 import pandas as pd
 import numpy as np
@@ -21,7 +21,7 @@ def load_hacked_units(
     model_name: str = "wavlm-large",
     layer: int = 21,
     k: int = 500,
-    lmbda: float = 0
+    lmbda: float = 100
 ) -> Tuple[List[np.ndarray], List[str]]:
     """
     Load "hacked" unit embeddings for a dataset by sampling one random example per unique word
@@ -51,9 +51,9 @@ def load_hacked_units(
         word_id = random_row['word_id']
 
         embedding = np.load(f"units/{language}/{dataset}/{model_name}/{layer}/k{k}/{lmbda}/{file}_{word_id}.npy")
-        for _ in range(len(group)):
+        for _, row in group[1].iterrows():
             heacked_features.append(embedding)
-            paths.append(f"{file}_{word_id}")
+            paths.append(f"{row['filename']}_{row['word_id']}")
     
     return heacked_features, paths
         
@@ -63,7 +63,6 @@ def load_hacked_features(
     dataset: str = "test",
     model_name: str = "wavlm-large",
     layer: int = 21,
-    noise_std: float = 0.01
 ) -> Tuple[List[np.ndarray], List[str]]:
     """
     Load features and create a 'hacked' version where each token embedding is replaced
@@ -75,7 +74,6 @@ def load_hacked_features(
         dataset: Dataset split (e.g., "train", "dev", "test").
         model_name: Feature extraction model name.
         layer: Layer index from which to load embeddings.
-        noise_std: Standard deviation of Gaussian noise to add to token embeddings.
 
     Returns:
         Tuple containing:
@@ -87,53 +85,40 @@ def load_hacked_features(
     boundary_df = pd.read_csv(f"Data/alignments/{language}/{dataset}_boundaries.csv")
     grouped_by_text = boundary_df.groupby('text')
 
-    scaler = StandardScaler()
-    pca = IncrementalPCA(n_components=350, batch_size=10_000)
-
-    all_features = []
-
+    
     feature_dir = Path(f"cut_features/{language}/{dataset}/{model_name}/{layer}/")
     file_paths = sorted(feature_dir.glob("*.npy"))
+    file_paths.sort()
 
-    for path in tqdm(file_paths, desc="Fitting scaler"):
+    all_features = []
+    for path in tqdm(file_paths, desc="Loading Features"):
         features = np.load(path, mmap_mode="r")  
-        scaler.partial_fit(features)
         all_features.append(features)
 
-    all_features = np.vstack(all_features)
-    all_features = scaler.transform(all_features)
-
-    pca.fit(all_features)
-    
-    all_features = []
-    for path in tqdm(file_paths, desc="Transforming features"):
-        features = np.load(path, mmap_mode="r")
-        features = scaler.transform(features)
-        reduced = pca.transform(features)
-        pooled = np.mean(reduced, axis=0)
-        all_features.append(pooled)
+    all_features = apply_pca(all_features)
+    all_features = pooling(all_features)
 
     print(f"Loaded and PCA-reduced: {len(all_features)} features with {all_features[0].shape} shape each")
     assert len(all_features) == len(file_paths), "Mismatch in number of feature files and paths"
 
-    file_paths = [p.stem for p in file_paths]
+    path_stems = [p.stem for p in file_paths]   
+    path_to_idx = {p: i for i, p in enumerate(path_stems)}
     hacked_features = []
-    path_to_idx = {p: i for i, p in enumerate(file_paths)}
+    hacked_paths = []
 
     for group in tqdm(grouped_by_text, desc="Creating hacked features"):
         group_df = group[1]
 
         token_features = []
-        token_ids = []
 
         for _, row in group_df.iterrows():
             filename = row['filename']
             word_id = row['word_id']
             token_id = f"{filename}_{word_id}"
             if token_id in path_to_idx:
+                hacked_paths.append(token_id)
                 idx = path_to_idx[token_id]
                 token_features.append(all_features[idx])
-                token_ids.append(token_id)
 
         if len(token_features) == 0:
             continue
@@ -142,15 +127,15 @@ def load_hacked_features(
         word_mean = np.mean(token_features, axis=0)
 
         for _ in range(len(group_df)):
-            noise = np.random.normal(0, noise_std, size=word_mean.shape)
-            hacked_feat = word_mean + noise
+            noise_std = np.random.uniform(0.005, 0.015)
+            hacked_feat = np.random.normal(word_mean, noise_std, size=word_mean.shape[0])
             hacked_features.append(hacked_feat)
 
-    assert len(hacked_features) == len(file_paths), f"Mismatch in total hacked features and paths: {len(hacked_features)} vs {len(file_paths)}"
-
+    assert len(hacked_features) == len(file_paths), f"Mismatch in total hacked features and paths: {len(hacked_features)} vs {len(file_paths)} vs  {len(hacked_paths)}"
     print(f"Total hacked features created: {len(hacked_features)} with shape: {hacked_features[0].shape}")
 
-    return hacked_features, file_paths
+    hacked_features = np.stack(hacked_features, axis=0).astype(np.float32)
+    return hacked_features, hacked_paths
 
     
 def build_hacked_ed_graph(
@@ -160,7 +145,7 @@ def build_hacked_ed_graph(
     layer: int = 21,
     threshold: float = 0.65,
     k: int = 500,
-    lmbda: float = 0,
+    lmbda: float = 100,
     batch_size: int = 1_000
 ) -> ig.Graph:
     """
@@ -235,7 +220,7 @@ def build_hacked_ed_graph(
     return g
 
 
-def hacked_ed_graph() -> None:
+def hacked_ed_graph(res: float = None) -> None:
     """
     Main pipeline for building a hacked edit-distance graph, partitioning it using CPM,
     saving the partition, and evaluating it.
@@ -255,6 +240,9 @@ def hacked_ed_graph() -> None:
         k= 500,
         lmbda=100
     )
+    if res is not None:
+        print(f"Repartitioning with resolution {res}")
+        partition_file = None
     if partition_file is None:
         g = build_hacked_ed_graph(
             language="english",
@@ -263,11 +251,11 @@ def hacked_ed_graph() -> None:
             layer=21,
             threshold=0.65,
             k=500,
-            lmbda=0,
+            lmbda=100.0,
             batch_size=1_000
         )
 
-        membership, _ = CPM_partition(g, num_clusters, args.res)
+        membership, _ = CPM_partition(g, num_clusters, 0.3)
         partition_file = write_partition(
             partition_type="hacked_graph",
             partition_membership=membership,   
@@ -310,16 +298,7 @@ def hacked_kmeans() -> None:
         lmbda=None
     )
     if partition_file is None:
-        features, paths = load_hacked_features(
-            language="english",
-            dataset="test",
-            model_name="wavlm-large",
-            layer=21,
-        )
-        features = normalize(
-                np.stack(features, axis=0), axis=1, norm="l2"
-            ).astype(np.float64)
-
+        features, paths = load_hacked_features()
         
         cluster_ids = cluster_features_kmeans(features, num_clusters)
         membership = convert_cluster_ids_to_partition(cluster_ids)
@@ -349,10 +328,14 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Builds a similarity graph from hacked unit sequences.")
     parser.add_argument("partition_type", type=str, choices=["graph", "kmeans"], help="Type of partition to perform.")
+    parser.add_argument("--res", type=float, default=None, help="If set, only evaluate existing partition without rebuilding graph.")
     args = parser.parse_args()
     
     if args.partition_type == "graph":
-        hacked_ed_graph()
+        if args.res is not None:
+            hacked_ed_graph(res=args.res)
+        else:
+            hacked_ed_graph()
     elif args.partition_type == "kmeans":
         hacked_kmeans()
     else:

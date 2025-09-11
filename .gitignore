@@ -11,4 +11,4 @@ models/
 graphs/
 partitions/
 hacked_clustering_graphs/
-hacked_partitions_graphs/
+hacked_representations_graphs/
