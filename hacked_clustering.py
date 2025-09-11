@@ -131,7 +131,7 @@ def hacked_ed_graph() -> None:
     num_clusters = len(set(boundary_df['text'].tolist()))   
 
     partition_file = find_partition(
-        partition_type="hacked_graph_clustering",
+        partition_type="hacked_clustering_graphs",
         language="english",
         dataset="test",
         model_name="wavlm-large",
@@ -167,7 +167,7 @@ def hacked_ed_graph() -> None:
 
         membership, _ = CPM_partition(g, num_clusters, resolution=0.3144, initialise_with=true_types)
         partition_file = write_partition(
-            partition_type="hacked_graph",
+            partition_type="hacked_clustering_graphs",
             partition_membership=membership,   
             language="english",
             dataset="test",
