@@ -247,6 +247,32 @@ def purity(labels_true: List[str], labels_pred: List[int]) -> float:
 
     return round(purity / n_tokens, 5)
 
+def completeness(labels_true: List[str], labels_pred: List[int]) -> float:
+    """
+    Compute clustering purity.
+
+    Args:
+        labels_true (List[str]): Ground-truth labels.
+        labels_pred (List[int]): Predicted cluster labels.
+
+    Returns:
+        float: Completeness score in [0, 1].
+    """
+    labels_true = np.array(labels_true)
+    labels_pred = np.array(labels_pred)
+
+    completeness = 0.0
+    n_tokens = 0
+
+    for k in set(labels_true):
+        labels_true_in_cluster = labels_pred[labels_true == k]
+        counts = Counter(labels_true_in_cluster)
+        if counts:
+            completeness += max(counts.values())
+            n_tokens += sum(counts.values())
+
+    return round(completeness / n_tokens, 5)
+
 
 def bitrate(labels_predicted: List[int], total_dur: float) -> float:
     """
@@ -278,6 +304,7 @@ def evaluate_partition_file(
     dataset: str,
     model_name: str,
     runtime: float,
+    phone_level: bool = False,
     **kwargs: Any,
 ) -> None:
     """
@@ -306,7 +333,11 @@ def evaluate_partition_file(
     discovered_transcriptions = discover(partition_file, trees)
     print(f"{len(discovered_transcriptions)} == {len(gold_fragments)}")
 
-    labels_true = [word for _, _, _, _, word in discovered_transcriptions]
+    if not phone_level:
+        labels_true = [word for _, _, _, _, word in discovered_transcriptions]
+    else:
+        labels_true = ["-".join(phones) for _, _, _, phones, _ in discovered_transcriptions]
+
     labels_predicted = [
         cluster_id for cluster_id, _, _, _, _ in discovered_transcriptions
     ]
@@ -316,6 +347,9 @@ def evaluate_partition_file(
 
     ned = ned_val(discovered_transcriptions)
     pur = purity(labels_true, labels_predicted)
+    comp = completeness(labels_true, labels_predicted)
+    homogeinity_score = metrics.homogeneity_score(labels_true, labels_predicted)
+    completeness_score = metrics.completeness_score(labels_true, labels_predicted)
     v_measure = metrics.v_measure_score(labels_true, labels_predicted)
     bitr = bitrate(labels_predicted, total_dur)
 
@@ -326,13 +360,16 @@ def evaluate_partition_file(
 
     print("\n--- Evaluation Metrics ---")
     print(f"NED              : {ned*100:.1f}%")
-    print(f"Purity           : {pur*100:.1f}%")
+    print(f"Purity*          : {pur*100:.1f}%")
+    print(f"Completeness*    : {comp*100:.1f}%")
+    print(f"Homogeinity      : {homogeinity_score*100:.1f}%")
+    print(f"Completeness     : {completeness_score*100:.1f}%")
     print(f"V-measure        : {v_measure*100:.1f}%")
     print(f"Bitrate          : {bitr:.1f} bits/s")
 
     print("\n--- Clustering ---")
     print(f"Predicted clusters: {num_pred_clusters}")
-    print(f"True words        : {num_true_words}")
+    print(f"True number types : {num_true_words}")
     print(f"Difference        : {diff}")
 
     print("\n--- Runtime ---")

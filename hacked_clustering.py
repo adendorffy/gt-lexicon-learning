@@ -180,7 +180,7 @@ def hacked_ed_graph(phone_level:bool = False) -> None:
         )
 
     evaluate_partition_file(
-        partition_file, "english", "test", "wavlm-large", 0.0,
+        partition_file, "english", "test", "wavlm-large", 0.0, phone_level=phone_level
     )
 
 
@@ -326,7 +326,7 @@ def hacked_kmeans(phone_level:bool = False) -> None:
         )
 
     evaluate_partition_file(
-        partition_file, "english", "test", "wavlm-large", 0.0
+        partition_file, "english", "test", "wavlm-large", 0.0, phone_level=phone_level
     )
 
 
