@@ -198,6 +198,7 @@ def ned_val(discovered_transcriptions: List[Tuple[int, str, Interval, List[str],
         float: Mean NED across all clusters.
     """
     discovered_transcriptions.sort(key=lambda x: x[0])
+    print(f"Example transcription: {discovered_transcriptions[0]}")
     overall_distances = []
 
     for _, group in itertools.groupby(discovered_transcriptions, key=lambda x: x[0]):
@@ -206,9 +207,6 @@ def ned_val(discovered_transcriptions: List[Tuple[int, str, Interval, List[str],
 
         if group_size < 2:
             continue
-
-        
-
 
         cluster_distances = [
             distance(p[3], q[3]) for p, q in itertools.combinations(group_list, 2)

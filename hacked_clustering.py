@@ -85,7 +85,7 @@ def build_ed_graph(
     return g, paths
 
 
-def get_true_types_from_paths(paths: List[str], boundary_df: pd.DataFrame) -> List[int]:
+def get_true_types_from_paths(paths: List[str], boundary_df: pd.DataFrame, phone_level:bool = False) -> List[int]:
     """
     Retrieve the true word types (text IDs) for a list of node paths using a boundary DataFrame.
 
@@ -93,12 +93,14 @@ def get_true_types_from_paths(paths: List[str], boundary_df: pd.DataFrame) -> Li
         paths: List of identifiers in the format "filename_wordid" corresponding to nodes.
         boundary_df: DataFrame containing columns ['filename', 'word_id', 'text'], representing
                      ground-truth word boundaries and type IDs.
+        phone_level: If True, use 'phon' column instead of 'text' for word types.
 
     Returns:
         List[int]: List of true word types for each path. If a path does not match any row in
                    the boundary_df, -1 is appended and a warning is printed.
     """
-    unique_texts = boundary_df['text'].unique()
+    target = "phones" if phone_level else "text"
+    unique_texts = boundary_df[target].unique()
     text2id = {t: i for i, t in enumerate(unique_texts)}
 
     true_types = []
@@ -107,7 +109,7 @@ def get_true_types_from_paths(paths: List[str], boundary_df: pd.DataFrame) -> Li
         word_id = int(path.split("_")[1])
         row = boundary_df[(boundary_df['filename'] == filename) & (boundary_df['word_id'] == word_id)]
         if not row.empty:
-            text_value = row['text'].values[0]
+            text_value = row[target].values[0]
             true_types.append(text2id[text_value])
         else:
             print(f"Warning: No matching row found for {path}")
@@ -115,23 +117,19 @@ def get_true_types_from_paths(paths: List[str], boundary_df: pd.DataFrame) -> Li
     return true_types
         
 
-def hacked_ed_graph() -> None:
+def hacked_ed_graph(phone_level:bool = False) -> None:
     """
     Main pipeline for building a hacked edit-distance graph, partitioning it using CPM,
     saving the partition, and evaluating it.
-
     Args:
-        args: Namespace containing configuration parameters:
-            - language, dataset, model_name, layer
-            - threshold, k, lmbda
-            - res: CPM resolution parameter
+        phone_level: If True, use phone-level boundaries instead of word-level.
     """
-    
+    target = "phones" if phone_level else "text"
     boundary_df = pd.read_csv("Data/alignments/english/test_boundaries.csv")
-    num_clusters = len(set(boundary_df['text'].tolist()))   
+    num_clusters = len(set(boundary_df[target].tolist()))   
 
     partition_file = find_partition(
-        partition_type="hacked_clustering_graphs",
+        partition_type=f"hacked_clustering_graphs_{target}",
         language="english",
         dataset="test",
         model_name="wavlm-large",
@@ -143,7 +141,7 @@ def hacked_ed_graph() -> None:
     )
     if partition_file is None:
 
-        graph_dir = Path("hacked_clustering_graphs/english/test/wavlm-large/21")
+        graph_dir = Path(f"hacked_clustering_graphs_{target}/english/test/wavlm-large/21")
         graph_dir.mkdir(parents=True, exist_ok=True)
 
         graph_pattern = graph_dir / "ed_500_100.0_0.65_*.pkl"
@@ -163,11 +161,11 @@ def hacked_ed_graph() -> None:
             )
             g.write_pickle(graph_dir / "ed_500_100.0_0.65_0.0.pkl")
     
-        true_types = get_true_types_from_paths(paths, boundary_df)
+        true_types = get_true_types_from_paths(paths, boundary_df, phone_level)
 
         membership, _ = CPM_partition(g, num_clusters, resolution=0.3144, initialise_with=true_types)
         partition_file = write_partition(
-            partition_type="hacked_clustering_graphs",
+            partition_type=f"hacked_clustering_graphs_{target}",
             partition_membership=membership,   
             language="english",
             dataset="test",
@@ -182,7 +180,7 @@ def hacked_ed_graph() -> None:
         )
 
     evaluate_partition_file(
-        partition_file, "english", "test", "wavllm-large", 0.0,
+        partition_file, "english", "test", "wavlm-large", 0.0,
     )
 
 
@@ -191,6 +189,7 @@ def load_hacked_features(
     dataset: str = "test",
     model_name: str = "wavlm-large",
     layer: int = 21,
+    phone_level: bool = False
 ) -> Tuple[List[np.ndarray], List[str]]:
     """
     Load features and create a 'hacked' version where each token embedding is replaced
@@ -202,6 +201,7 @@ def load_hacked_features(
         dataset: Dataset split (e.g., "train", "dev", "test").
         model_name: Feature extraction model name.
         layer: Layer index from which to load embeddings.
+        phone_level: If True, use phone-level boundaries instead of word-level.
 
     Returns:
         Tuple containing:
@@ -209,9 +209,10 @@ def load_hacked_features(
             - List of str: Identifiers per token in "filename_wordid" format.
             - np.ndarray: True mean embeddings per word type (centroids).
     """
+    target = "phones" if phone_level else "text"
 
     boundary_df = pd.read_csv(f"Data/alignments/{language}/{dataset}_boundaries.csv")
-    grouped_by_text = boundary_df.groupby('text')
+    grouped_by_text = boundary_df.groupby(target)
 
     pca = PCA(n_components=350)
     scaler = StandardScaler()
@@ -271,16 +272,19 @@ def load_hacked_features(
     return split_features, all_paths, np.stack(list(centroids_dict.values())).astype(np.float32)
 
 
-def hacked_kmeans() -> None:
+def hacked_kmeans(phone_level:bool = False) -> None:
     """
     Main pipeline for clustering hacked features using k-means,
     saving the partition, and evaluating it.
+    Args:
+        phone_level: If True, use phone-level boundaries instead of word-level.
     """ 
     boundary_df = pd.read_csv("Data/alignments/english/test_boundaries.csv")
-    num_clusters = len(set(boundary_df['text'].tolist()))   
+    target = "phones" if phone_level else "text"
+    num_clusters = len(set(boundary_df[target].tolist()))   
 
     partition_file = find_partition(
-        partition_type="hacked_kmeans_clustering",
+        partition_type=f"hacked_kmeans_clustering_{target}",
         language="english",
         dataset="test",
         model_name="wavlm-large",
@@ -307,7 +311,7 @@ def hacked_kmeans() -> None:
         membership = convert_cluster_ids_to_partition(cluster_ids)
 
         partition_file = write_partition(
-            partition_type="hacked_kmeans_clustering",
+            partition_type=f"hacked_kmeans_clustering_{target}",
             partition_membership=membership,   
             language="english",
             dataset="test",
@@ -331,11 +335,12 @@ if __name__ == "__main__":
         
     parser = argparse.ArgumentParser(description="Builds a similarity graph from hacked unit sequences.")
     parser.add_argument("partition_type", type=str, choices=["graph", "kmeans"], help="Type of partition to perform.")
+    parser.add_argument("--phone_level", action="store_true", help="Use phone-level boundaries instead of word-level.")
     args = parser.parse_args()
     
     if args.partition_type == "graph":
-        hacked_ed_graph()
+        hacked_ed_graph(phone_level=args.phone_level)
     elif args.partition_type == "kmeans":
-        hacked_kmeans()
+        hacked_kmeans(phone_level=args.phone_level)
     else:
         raise ValueError(f"Unsupported partition type: {args.partition_type}")

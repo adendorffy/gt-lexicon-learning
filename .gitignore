@@ -10,5 +10,5 @@ distances/
 models/
 graphs/
 partitions/
-hacked_clustering_graphs/
+hacked_clustering_graphs_*/
 hacked_representations_graphs/
