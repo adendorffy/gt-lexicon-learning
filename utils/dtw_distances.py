@@ -105,7 +105,7 @@ def compute_dtw_distances(
     
 
     word_features = apply_pca(word_features)
-    word_features = np.array([feat.astype(np.float64) for feat in word_features])
+    word_features = [feat.astype(np.float64) for feat in word_features]
 
     batch_idx = current_size // batch_size
     buff_idx = 0
